@@ -599,5 +599,6 @@ def perform_diagnosis():
 
 
 if __name__ == "__main__":
+    init_session_state()
     render_sidebar()
     main()

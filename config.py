@@ -13,7 +13,7 @@ load_dotenv()
 # Ollama LLM 설정
 # ============================================================================
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "yolo0perris/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF_Q3_K_M")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "shqkel/EEVE-Korean-Chat-10.8B")
 
 # ============================================================================
 # ChromaDB 벡터 저장소 설정
