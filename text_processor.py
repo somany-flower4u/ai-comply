@@ -68,13 +68,14 @@ class LegalTextProcessor:
             청크 리스트
         """
         law_name = article.get('law_name', '')
+        law_id = article.get('law_id', '')
         article_no = article.get('article_no', '')
         content = article.get('article_content', '')
         
         # 내용이 청크 크기 이하면 그대로 반환
         if len(content) <= CHUNK_SIZE:
             chunk = article.copy()
-            chunk['chunk_id'] = self.create_chunk_id(law_name, article_no, "")
+            chunk['chunk_id'] = self.create_chunk_id(law_id, law_name, article_no, "")
             chunk['paragraph_no'] = ""
             chunk = self.enrich_metadata(chunk)
             return [chunk]
@@ -87,7 +88,7 @@ class LegalTextProcessor:
             chunk = article.copy()
             chunk['article_content'] = para_content.strip()
             chunk['paragraph_no'] = para_no
-            chunk['chunk_id'] = self.create_chunk_id(law_name, article_no, para_no)
+            chunk['chunk_id'] = self.create_chunk_id(law_id, law_name, article_no, para_no)
             chunk = self.enrich_metadata(chunk)
             chunks.append(chunk)
         
@@ -143,20 +144,31 @@ class LegalTextProcessor:
         
         return paragraphs if paragraphs else [("", content)]
 
-    def create_chunk_id(self, law_name: str, article_no: str, paragraph_no: str) -> str:
+    def create_chunk_id(self, law_id: str, law_name: str, article_no: str, paragraph_no: str) -> str:
         """
         고유한 청크 ID 생성
         
-        형식: {법령명}_{조문번호}_{항번호}
+        형식: {법령ID}_{조문번호}_{항번호}_{UUID}
         """
-        law_abbr = law_name.replace(" ", "")[:10]
+        import uuid
+        
+        # law_id가 있으면 사용, 없으면 법령명 해시 사용
+        if law_id:
+            law_prefix = law_id
+        else:
+            import hashlib
+            law_prefix = hashlib.md5(law_name.encode()).hexdigest()[:6]
+        
         article_clean = article_no.replace("제", "").replace("조", "").strip()
+        
+        # UUID를 짧게 줄임 (처음 8자)
+        unique_suffix = str(uuid.uuid4())[:8]
         
         if paragraph_no:
             para_clean = paragraph_no.strip()
-            chunk_id = f"{law_abbr}_{article_clean}_{para_clean}"
+            chunk_id = f"{law_prefix}_{article_clean}_{para_clean}_{unique_suffix}"
         else:
-            chunk_id = f"{law_abbr}_{article_clean}"
+            chunk_id = f"{law_prefix}_{article_clean}_{unique_suffix}"
         
         return chunk_id
 

@@ -3,6 +3,7 @@
 모든 진단 에이전트가 상속받는 기본 클래스로 RAG 로직을 제공합니다.
 """
 
+import json
 import logging
 from typing import Dict, List, Optional
 from langchain_community.llms import Ollama
@@ -38,6 +39,26 @@ class BaseAgent:
             llm_config = {}
         
         from config import OLLAMA_BASE_URL, OLLAMA_MODEL
+        import requests
+        
+        # Ollama 서버 연결 확인
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(
+                    f"{llm_config.get('base_url', OLLAMA_BASE_URL)}/api/tags",
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    logger.info("✓ Ollama 서버 연결 확인 완료")
+                    break
+            except requests.exceptions.ConnectionError:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Ollama 연결 시도 {attempt + 1}/{max_retries} 실패, 재시도 중...")
+                    import time
+                    time.sleep(2)
+                else:
+                    logger.error("⚠️  Ollama 서버에 연결할 수 없습니다. Ollama가 실행 중인지 확인하세요.")
         
         self.llm = Ollama(
             base_url=llm_config.get('base_url', OLLAMA_BASE_URL),
@@ -45,6 +66,7 @@ class BaseAgent:
             temperature=llm_config.get('temperature', 0.3),
             top_k=llm_config.get('top_k', 40),
             top_p=llm_config.get('top_p', 0.9),
+            timeout=120.0,  # 타임아웃을 120초로 설정 (모델 로딩 시간 고려)
         )
         
         logger.info(f"{self.__class__.__name__} 초기화 완료")
@@ -180,19 +202,83 @@ class BaseAgent:
         Returns:
             파싱된 응답
         """
+        import re
+        
         try:
-            # JSON 형식 시도
-            import json
+            response_stripped = response.strip()
+            logger.info(f"응답 파싱 시도 (길이: {len(response_stripped)}자)")
             
-            # JSON 블록 찾기
+            # 1단계: Markdown 코드블록에서 JSON 추출
+            json_code_match = re.search(r'```(?:json)?\s*\n(.*?)\n```', response, re.DOTALL)
+            if json_code_match:
+                json_str = json_code_match.group(1).strip()
+                logger.info(f"Markdown JSON 블록 감지, 추출 시도")
+                try:
+                    parsed = json.loads(json_str)
+                    logger.info("✓ JSON 파싱 성공 (Markdown 블록)")
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Markdown 블록 파싱 실패: {str(e)[:100]}")
+            
+            # 2단계: 직접 JSON 파싱 (응답이 JSON으로 시작하는 경우)
+            if response_stripped.startswith('{') and response_stripped.endswith('}'):
+                try:
+                    parsed = json.loads(response_stripped)
+                    logger.info("✓ JSON 파싱 성공 (직접)")
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.warning(f"직접 파싱 실패: {str(e)[:100]}")
+            
+            # 3단계: 응답 내 JSON 블록 찾기
             json_start = response.find('{')
             json_end = response.rfind('}') + 1
             
             if json_start != -1 and json_end > json_start:
                 json_str = response[json_start:json_end]
-                return json.loads(json_str)
-        except:
-            pass
+                logger.info(f"JSON 블록 범위 감지: [{json_start}:{json_end}] (길이: {len(json_str)}자)")
+                
+                # 3-1: 직접 파싱 시도
+                try:
+                    parsed = json.loads(json_str)
+                    logger.info("✓ JSON 파싱 성공 (블록 검출)")
+                    return parsed
+                except json.JSONDecodeError as e:
+                    logger.warning(f"블록 파싱 실패 (1차): {str(e)[:100]}")
+                    
+                    # 3-2: 줄바꿈 제거하고 재시도
+                    json_cleaned = json_str.replace('\n', ' ').replace('  ', ' ')
+                    try:
+                        parsed = json.loads(json_cleaned)
+                        logger.info("✓ JSON 파싱 성공 (줄바꿈 제거 후)")
+                        return parsed
+                    except json.JSONDecodeError:
+                        logger.warning(f"블록 파싱 실패 (2차)")
+                        
+                        # 3-3: 마지막 쉼표 제거 시도 (일반적인 오류)
+                        json_comma_fix = re.sub(r',\s*}', '}', json_str)
+                        json_comma_fix = re.sub(r',\s*]', ']', json_comma_fix)
+                        try:
+                            parsed = json.loads(json_comma_fix)
+                            logger.info("✓ JSON 파싱 성공 (쉼표 제거 후)")
+                            return parsed
+                        except json.JSONDecodeError:
+                            logger.warning(f"블록 파싱 실패 (3차)")
+                            pass
         
-        # 기본값: 전체 응답 반환
-        return {"result": response}
+        except Exception as e:
+            logger.warning(f"응답 파싱 중 예상 오류: {str(e)}")
+        
+        # 파싱 실패 - 로그 기록 및 원본 응답 반환
+        logger.error(f"JSON 파싱 완전 실패. 응답 일부:\n{response[:300]}...")
+        
+        return {
+            "error": "JSON parsing failed",
+            "raw_response": response,
+            "is_high_impact": False,
+            "risk_level": "저위험",
+            "risk_factors": [],
+            "reasoning": response[:500] if response else "응답이 없습니다.",
+            "recommendation": "",
+            "operator_types": [],
+            "confidence": "낮음"
+        }

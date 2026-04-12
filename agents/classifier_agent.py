@@ -93,13 +93,14 @@ AI 유형: {user_input.get('ai_type', '')}
 데이터 활용: {', '.join(user_input.get('data_usage', []))}
 개발 단계: {user_input.get('development_stage', '')}
 
-다음 JSON 형식으로 응답하세요:
+===== 반드시 아래의 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요. =====
 {{
-  "operator_types": ["분류된 유형1", "분류된 유형2", ...],
+  "operator_types": ["분류된 유형1", "분류된 유형2"],
   "reasoning": "상세한 분류 이유",
-  "confidence": "높음/중간/낮음",
-  "key_factors": ["주요 고려 요소1", "주요 고려 요소2", ...]
-}}"""
+  "confidence": "높음" 또는 "중간" 또는 "낮음",
+  "key_factors": ["주요 고려 요소1", "주요 고려 요소2"]
+}}
+===== 위의 JSON만 응답하세요. 추가 설명은 하지 마세요. ===="""
 
             # 3단계: LLM 호출
             response = self._generate(system_prompt, user_prompt, context)

@@ -109,7 +109,10 @@ class LawDataCollector:
         try:
             # XML을 딕셔너리로 파싱
             response_dict = xmltodict.parse(response_text)
-            laws = response_dict.get('root', {}).get('law', [])
+            
+            # 검색 결과 구조 처리 (LawSearch -> law 구조)
+            search_result = response_dict.get('LawSearch', {})
+            laws = search_result.get('law', [])
             
             # 리스트가 아닌 경우 리스트로 변환
             if not isinstance(laws, list):
@@ -119,31 +122,43 @@ class LawDataCollector:
                 logger.warning(f"검색 결과 없음: {query}")
                 return None
             
-            # 정확한 이름과 일치하는 첫 번째 결과 반환
-            for law in laws:
-                if law.get('법령명', '').strip() == query.strip():
-                    result = {
-                        "law_name": law.get('법령명', ''),
-                        "law_id": law.get('법령ID', ''),
-                        "law_type": law.get('법종', ''),
-                        "enforcement_date": law.get('시행일자', ''),
-                        "repeal_date": law.get('폐지일자', '')
-                    }
-                    logger.info(f"검색 완료: {result['law_name']} (ID: {result['law_id']})")
-                    return result
+            logger.info(f"검색 결과: {len(laws)}개 발견")
             
-            # 정확한 일치가 없으면 첫 번째 결과 반환
-            if laws:
-                law = laws[0]
-                result = {
-                    "law_name": law.get('법령명', ''),
-                    "law_id": law.get('법령ID', ''),
-                    "law_type": law.get('법종', ''),
-                    "enforcement_date": law.get('시행일자', ''),
-                    "repeal_date": law.get('폐지일자', '')
-                }
-                logger.info(f"검색 완료 (부분일치): {result['law_name']}")
-                return result
+            # 정확한 이름과 일치하는 첫 번째 결과 반환, 없으면 첫 번째 사용
+            matched_law = None
+            for law in laws:
+                law_name_cdata = law.get('법령명한글', '')
+                # CDATA 처리
+                if isinstance(law_name_cdata, dict):
+                    law_name = law_name_cdata.get('#text', '')
+                else:
+                    law_name = law_name_cdata
+                
+                if law_name.strip() == query.strip():
+                    matched_law = law
+                    break
+            
+            # 정확한 매치가 없으면 첫 번째 결과 사용
+            if not matched_law:
+                matched_law = laws[0]
+                logger.info(f"정확한 매치 없음, 첫 번째 결과 사용")
+            
+            law = matched_law
+            law_name_cdata = law.get('법령명한글', '')
+            if isinstance(law_name_cdata, dict):
+                law_name = law_name_cdata.get('#text', '')
+            else:
+                law_name = law_name_cdata
+            
+            result = {
+                "law_name": law_name,
+                "law_id": law.get('법령ID', ''),
+                "law_type": law.get('법령구분명', '법률'),
+                "enforcement_date": law.get('시행일자', ''),
+                "repeal_date": law.get('폐지일자', '')
+            }
+            logger.info(f"검색 완료: {result['law_name']}")
+            return result
             
         except Exception as e:
             logger.error(f"XML 파싱 오류: {str(e)}")
@@ -195,63 +210,75 @@ class LawDataCollector:
             
         Returns:
             조문 리스트
-            [
-                {
-                    "law_name": str,
-                    "article_no": str,
-                    "article_title": str,
-                    "article_content": str,
-                    "enforcement_date": str,
-                    "law_type": str,
-                    "law_id": str
-                },
-                ...
-            ]
         """
         articles = []
         logger.info(f"조문 파싱 시작: {law_name}")
         
         try:
-            # XML 구조: root -> law -> Articles -> Article
-            root = xml_data.get('root', {})
-            law_info = root.get('law', {})
-            articles_data = law_info.get('Articles', {})
-            article_list = articles_data.get('Article', [])
+            # XML 구조: 법령 -> 조문 -> 조문단위
+            law_info = xml_data.get('법령', {})
+            
+            if not law_info:
+                logger.warning("법령 정보를 찾을 수 없음")
+                return []
+            
+            # 기본 정보 추출
+            base_info = law_info.get('기본정보', {})
+            law_id = base_info.get('법령ID', '')
+            
+            # 조문 데이터 추출
+            articles_section = law_info.get('조문', {})
+            article_units = articles_section.get('조문단위', [])
             
             # 딕셔너리로 반환되면 리스트로 변환
-            if isinstance(article_list, dict):
-                article_list = [article_list]
-            elif not isinstance(article_list, list):
-                article_list = []
+            if isinstance(article_units, dict):
+                article_units = [article_units]
+            elif not isinstance(article_units, list):
+                article_units = []
             
-            law_id = law_info.get('@ID', '')
+            logger.info(f"총 {len(article_units)}개 조문단위 발견")
             
-            for article in article_list:
+            for article_unit in article_units:
                 try:
-                    article_no = article.get('@Number', '')
-                    article_title = article.get('@Title', '')
+                    article_no = article_unit.get('조문번호', '')
+                    article_title = article_unit.get('조문제목', '')
+                    article_content = article_unit.get('조문내용', '')
                     
-                    # 조문 내용 추출 (항목들을 합침)
-                    article_content = ''
-                    if article.get('Paragraphs'):
-                        paragraphs = article.get('Paragraphs', {}).get('Paragraph', [])
-                        if isinstance(paragraphs, dict):
-                            paragraphs = [paragraphs]
+                    # CDATA 처리
+                    if isinstance(article_title, dict):
+                        article_title = article_title.get('#text', '')
+                    if isinstance(article_content, dict):
+                        article_content = article_content.get('#text', '')
+                    
+                    # 항(항목) 정보도 포함
+                    paragraphs = article_unit.get('항', {})
+                    if paragraphs and isinstance(paragraphs, dict):
+                        para_content = ""
+                        items = paragraphs.get('호', [])
+                        if isinstance(items, dict):
+                            items = [items]
                         
-                        for para in paragraphs:
-                            para_num = para.get('@Number', '')
-                            para_content = para.get('#text', '')
-                            if para_num and para_content:
-                                article_content += f"{para_num} {para_content} "
+                        for item in items:
+                            item_no = item.get('호번호', '')
+                            item_content = item.get('호내용', '')
+                            
+                            if isinstance(item_content, dict):
+                                item_content = item_content.get('#text', '')
+                            
+                            if item_no and item_content:
+                                para_content += f"{item_no} {item_content} "
+                        
+                        if para_content:
+                            article_content += " " + para_content
                     
-                    # 조문 내용이 없으면 직접 추출 시도
-                    if not article_content:
-                        article_content = article.get('#text', '')
-                    
-                    if article_no and article_content:
+                    # 조문이 실제 조문인 경우만 추가 (전문, 부칙 제외)
+                    if article_no and article_unit.get('조문여부') == '조문':
+                        if not article_content:
+                            article_content = f"제{article_no}조"
+                        
                         article_obj = {
                             "law_name": law_name,
-                            "article_no": article_no.strip(),
+                            "article_no": f"제{article_no}조" if article_no.isdigit() else article_no,
                             "article_title": article_title.strip() if article_title else "",
                             "article_content": article_content.strip(),
                             "enforcement_date": enforcement_date,

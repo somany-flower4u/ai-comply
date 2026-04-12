@@ -89,39 +89,37 @@ class ObligationAgent(BaseAgent):
 산업분야: {user_input.get('industry_sector', '')}
 개인정보 포함: {'예' if '개인정보 포함 데이터' in user_input.get('data_usage', []) else '아니오'}
 
-다음 JSON 형식으로 응답하세요:
+===== 반드시 아래의 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요. =====
 {{
   "obligations": [
     {{
       "category": "의무 카테고리",
       "name": "의무사항명",
       "description": "상세 설명",
-      "legal_basis": ["제XX조", "제XX조"],
-      "priority": "필수/권장",
+      "legal_basis": ["제XX조"],
+      "priority": "필수" 또는 "권장",
       "deadline": "이행 주기",
-      "checklist": ["구체적 실행 항목1", "구체적 실행 항목2", ...]
-    }},
-    ...
+      "checklist": ["구체적 실행 항목1", "구체적 실행 항목2"]
+    }}
   ],
   "roadmap": [
     {{
       "phase": 1,
       "title": "단계 제목",
       "duration": "소요 기간",
-      "actions": ["구체적 실행 항목1", ...]
-    }},
-    ...
+      "actions": ["구체적 실행 항목1"]
+    }}
   ],
   "related_laws": [
     {{
       "law_name": "법령명",
       "articles": ["제XX조"],
       "relevance": "관련성 설명"
-    }},
-    ...
+    }}
   ],
-  "summary": "종합 요약 및 권장사항"
-}}"""
+  "summary": "종합 요약"
+}}
+===== 위의 JSON만 응답하세요. 추가 설명은 하지 마세요. ===="""
 
             # 3단계: LLM 호출
             response = self._generate(system_prompt, user_prompt, context)

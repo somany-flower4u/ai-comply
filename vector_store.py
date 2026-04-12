@@ -196,12 +196,19 @@ class LegalVectorStore:
             query_embedding = self.embedding_model.encode(query, convert_to_tensor=False)
             
             # ChromaDB 검색 수행
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=filter_dict,
-                include=["embeddings", "documents", "metadatas", "distances"]
-            )
+            query_kwargs = {
+                "query_embeddings": [query_embedding],
+                "n_results": n_results,
+                "include": ["embeddings", "documents", "metadatas", "distances"]
+            }
+            
+            # 필터가 있는 경우에만 where 파라미터 추가 (검증)
+            if filter_dict:
+                # ChromaDB where 필터 검증: $contains는 지원하지 않음
+                self._validate_where_filter(filter_dict)
+                query_kwargs["where"] = filter_dict
+            
+            results = self.collection.query(**query_kwargs)
             
             # 결과 포매팅
             formatted_results = []
@@ -220,7 +227,58 @@ class LegalVectorStore:
         
         except Exception as e:
             logger.error(f"검색 중 오류: {str(e)}")
+            # 필터 오류 시 필터 없이 재시도
+            if filter_dict and "where" in str(e).lower():
+                logger.warning("필터 오류 감지, 필터 없이 재시도합니다...")
+                try:
+                    query_embedding = self.embedding_model.encode(query, convert_to_tensor=False)
+                    query_kwargs = {
+                        "query_embeddings": [query_embedding],
+                        "n_results": n_results,
+                        "include": ["embeddings", "documents", "metadatas", "distances"]
+                    }
+                    results = self.collection.query(**query_kwargs)
+                    
+                    formatted_results = []
+                    if results['documents'] and len(results['documents']) > 0:
+                        for i, doc in enumerate(results['documents'][0]):
+                            result = {
+                                "content": doc,
+                                "metadata": results['metadatas'][0][i] if results['metadatas'] else {},
+                                "distance": results['distances'][0][i] if results['distances'] else 0.0
+                            }
+                            formatted_results.append(result)
+                    
+                    logger.info(f"✓ 필터 없이 {len(formatted_results)}개 결과 반환")
+                    return formatted_results
+                except Exception as e2:
+                    logger.error(f"필터 없는 검색도 실패: {str(e2)}")
+                    return []
             return []
+
+    def _validate_where_filter(self, filter_dict: Dict) -> None:
+        """
+        ChromaDB where 필터 검증
+        
+        Args:
+            filter_dict: 검증할 필터
+            
+        Raises:
+            ValueError: 지원하지 않는 연산자 사용 시
+        """
+        def check_filter(filt):
+            if isinstance(filt, dict):
+                for key, value in filt.items():
+                    # ChromaDB에서 지원하지 않는 연산자 확인
+                    if isinstance(value, dict):
+                        for op_key in value.keys():
+                            if op_key.startswith('$') and op_key not in ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$and', '$or']:
+                                raise ValueError(f"지원하지 않는 연산자: {op_key}. ChromaDB는 $contains를 지원하지 않습니다. 대신 Python 필터링을 사용하세요.")
+                    elif key in ['$and', '$or'] and isinstance(value, list):
+                        for item in value:
+                            check_filter(item)
+        
+        check_filter(filter_dict)
 
     def search_by_category(
         self,
@@ -237,18 +295,63 @@ class LegalVectorStore:
             n_results: 반환할 결과 개수
             
         Returns:
-            검색 결과 리스트
+            검색 결과 리스트 (카테고리 필터링됨)
         """
         logger.info(f"카테고리 검색: '{query}' (카테고리: {category})")
         
-        # ChromaDB where 필터 구성
-        where_filter = {
-            "$contains": {
-                "category": category
-            }
-        }
+        try:
+            # 카테고리 필터 없이 더 많은 결과를 먼저 검색
+            # ChromaDB의 $contains 연산자 오류를 피하기 위해 필터 없이 검색
+            search_results = self.search(query, n_results * 3, filter_dict=None)
+            
+            if not search_results:
+                logger.info("검색 결과 없음, 빈 리스트 반환")
+                return search_results
+            
+            # 카테고리 필터링 (메타데이터의 category 필드에 포함된 항목만)
+            filtered_results = []
+            for result in search_results:
+                metadata = result.get('metadata', {})
+                categories_str = metadata.get('category', '')
+                
+                if not categories_str:
+                    continue
+                
+                # 쉼표로 구분된 카테고리들을 분석
+                categories = [c.strip() for c in categories_str.split(',')]
+                
+                # 원하는 카테고리가 포함되어 있는지 확인 (정확한 매칭)
+                if any(category.strip().lower() in cat.lower() for cat in categories):
+                    filtered_results.append(result)
+                    if len(filtered_results) >= n_results:
+                        break
+            
+            # 충분한 결과가 없으면 더 검색
+            if len(filtered_results) < n_results:
+                logger.info(f"카테고리 필터링으로 {len(filtered_results)}개만 획득, 추가 검색 수행...")
+                additional_results = self.search(query, n_results * 2, filter_dict=None)
+                for result in additional_results[len(search_results):]:
+                    metadata = result.get('metadata', {})
+                    categories_str = metadata.get('category', '')
+                    
+                    if not categories_str:
+                        continue
+                    
+                    categories = [c.strip() for c in categories_str.split(',')]
+                    if any(category.strip().lower() in cat.lower() for cat in categories):
+                        if result not in filtered_results:
+                            filtered_results.append(result)
+                        if len(filtered_results) >= n_results:
+                            break
+            
+            logger.info(f"✓ {len(filtered_results)}개 카테고리 필터링 결과 반환")
+            return filtered_results[:n_results]
         
-        return self.search(query, n_results, where_filter)
+        except Exception as e:
+            logger.error(f"카테고리 검색 오류: {str(e)}")
+            # 실패 시 필터 없이 일반 검색 반환
+            logger.info("필터 없이 일반 검색으로 대체")
+            return self.search(query, n_results, filter_dict=None)
 
     def search_by_law(
         self,

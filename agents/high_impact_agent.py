@@ -101,23 +101,23 @@ AI 유형: {user_input.get('ai_type', '')}
 서비스 대상: {', '.join(user_input.get('target_users', []))}
 의사결정 영향: {user_input.get('decision_impact', '심사 중')}
 개인정보 활용: {user_input.get('data_usage', [])}
-사업자 유형: {', '.join({operator_types})}
+사업자 유형: {', '.join(operator_types)}
 
-다음 JSON 형식으로 응답하세요:
+===== 반드시 아래의 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요. =====
 {{
-  "is_high_impact": true/false,
-  "risk_level": "고위험/중위험/저위험",
+  "is_high_impact": true 또는 false,
+  "risk_level": "고위험" 또는 "중위험" 또는 "저위험",
   "risk_factors": [
     {{
-      "factor": "위험요소명",
-      "score": 1-5,
-      "explanation": "설명"
-    }},
-    ...
+      "factor": "위험요소이름",
+      "score": 1부터 5사이의 숫자,
+      "explanation": "설명문"
+    }}
   ],
   "reasoning": "상세한 진단 이유",
   "recommendation": "권장사항"
-}}"""
+}}
+===== 위의 JSON만 응답하세요. 추가 설명은 하지 마세요. ====="""
 
             # 3단계: LLM 호출
             response = self._generate(system_prompt, user_prompt, context)

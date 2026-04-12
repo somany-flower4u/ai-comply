@@ -55,22 +55,35 @@ echo.
 REM 5단계: Ollama 확인
 echo [4단계] Ollama 확인 중...
 
-curl -s http://localhost:11434/api/tags >nul 2>&1
-if %errorlevel% equ 0 (
+REM Ollama 상태 확인 (간단한 방식)
+timeout /t 1 /nobreak >nul 2>&1
+
+echo.
+echo Ollama 서버 상태 확인 중입니다. 잠시만 기다려주세요...
+echo.
+
+REM curl을 사용한 Ollama 체크 (더 간단함)
+curl -s -m 5 http://localhost:11434/api/tags >nul 2>&1
+set OLLAMA_STATUS=%errorlevel%
+
+if %OLLAMA_STATUS% equ 0 (
     echo ✓ Ollama가 실행 중입니다 (http://localhost:11434)
+    echo.
+    echo 로드된 모델:
+    curl -s http://localhost:11434/api/tags 2>&1
+    echo.
 ) else (
     echo.
-    echo ⚠️  Ollama가 실행되지 않은 것 같습니다.
+    echo ❌ Ollama 연결 실패.
     echo.
-    echo Ollama를 시작하려면:
-    echo   1. 명령 프롬프트에서 'ollama serve' 실행
-    echo   2. 또는 https://ollama.ai 에서 Ollama 설치
+    echo Ollama 서버를 시작하려면:
+    echo   1. 새 명령 프롬프트/PowerShell 열기
+    echo   2. 다음 명령 실행: ollama serve
+    echo   3. 또는 Ollama 앱 실행 (설치되어 있는 경우)
     echo.
-    set /p continue="계속 진행하시겠습니까? (y/n): "
-    if /i not "!continue!"=="y" (
-        call venv\Scripts\deactivate.bat
-        exit /b 1
-    )
+    echo Ollama 설치:
+    echo   https://ollama.ai 에서 다운로드 및 설치
+    echo.
 )
 
 echo.

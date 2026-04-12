@@ -46,6 +46,9 @@ def init_session_state():
     
     if 'checklist' not in st.session_state:
         st.session_state.checklist = {}
+    
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = 0
 
 
 # ============================================================================
@@ -156,6 +159,8 @@ def main():
         "✅ 체크리스트",
         "🔍 법령 검색"
     ])
+    
+    tabs = [tab1, tab2, tab3, tab4]
     
     # ========================================================================
     # Tab 1: 서비스 정보 입력
@@ -299,7 +304,15 @@ def main():
                         st.info(f"✓ {op_type}")
             
             with st.expander("상세 분류 이유"):
-                st.markdown(classifier_result.get('reasoning', '분석 실패'))
+                reasoning = classifier_result.get('reasoning', '분석 실패')
+                
+                # 딕셔너리나 리스트인 경우 처리
+                if isinstance(reasoning, (dict, list)):
+                    reasoning = json.dumps(reasoning, ensure_ascii=False, indent=2)
+                elif not isinstance(reasoning, str):
+                    reasoning = str(reasoning)
+                
+                st.markdown(reasoning)
                 
                 if classifier_result.get('relevant_articles'):
                     st.markdown("**관련 조문:**")
@@ -328,7 +341,8 @@ def main():
             
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                st.markdown(f"### {risk_colors.get(risk_level, risk_level)}")
+                display_risk = risk_colors.get(risk_level, f"❓ {risk_level}")
+                st.markdown(f"### {display_risk}")
             
             if is_high_impact:
                 st.error("⚠️ 이 서비스는 고영향 AI로 분류됩니다. 강화된 규제가 적용됩니다.")
@@ -347,7 +361,62 @@ def main():
                     st.caption(factor.get('explanation', ''))
             
             with st.expander("상세 진단 내용"):
-                st.markdown(high_impact_result.get('reasoning', '분석 실패'))
+                # 원본 응답 (디버깅용)
+                if high_impact_result.get('error') or high_impact_result.get('raw_response'):
+                    st.error("⚠️ 진단 결과 해석 오류가 발생했습니다.")
+                    st.markdown("**원인:** LLM의 응답이 예상된 JSON 형식과 다릅니다.")
+                    
+                    with st.expander("세부 정보 보기 - LLM 원본 응답"):
+                        if high_impact_result.get('raw_response'):
+                            raw = high_impact_result.get('raw_response', '')
+                            # 길이가 너무 길면 앞뒤 일부만 표시
+                            if len(raw) > 1000:
+                                st.markdown(f"**응답 길이:** {len(raw)}자")
+                                st.markdown("**앞부분 (250자):**")
+                                st.markdown(f"```\n{raw[:250]}\n```")
+                                st.markdown("**중간부분 (250자):**")
+                                st.markdown(f"```\n{raw[len(raw)//2-125:len(raw)//2+125]}\n```")
+                                st.markdown("**뒷부분 (250자):**")
+                                st.markdown(f"```\n{raw[-250:]}\n```")
+                            else:
+                                st.markdown(f"```\n{raw}\n```")
+                        if high_impact_result.get('error'):
+                            st.markdown(f"**오류 메시지:** {high_impact_result.get('error')}")
+                    
+                    st.markdown("**권장사항:**")
+                    st.markdown("""
+                    1. 페이지를 새로고침하고 다시 진단해보세요
+                    2. 서비스 설명을 더 간결하게 수정해보세요
+                    3. AI 문제가 지속되면 LLM 서버 상태를 확인하세요
+                    """)
+                else:
+                    # 정상적인 경우 - 진단 결과 표시
+                    st.markdown("**진단 결과 요약:**")
+                    reasoning = high_impact_result.get('reasoning', '분석 실패')
+                    
+                    if isinstance(reasoning, (dict, list)):
+                        reasoning = json.dumps(reasoning, ensure_ascii=False, indent=2)
+                    elif not isinstance(reasoning, str):
+                        reasoning = str(reasoning)
+                    
+                    st.markdown(reasoning)
+                    
+                    if high_impact_result.get('recommendation'):
+                        st.markdown("**권장사항:**")
+                        recommendation = high_impact_result.get('recommendation')
+                        if isinstance(recommendation, (dict, list)):
+                            recommendation = json.dumps(recommendation, ensure_ascii=False, indent=2)
+                        elif not isinstance(recommendation, str):
+                            recommendation = str(recommendation)
+                        st.markdown(recommendation)
+                
+                # 위험요소 상세 정보
+                if risk_factors:
+                    st.markdown("**위험요소 상세:**")
+                    for i, factor in enumerate(risk_factors, 1):
+                        with st.expander(f"{i}. {factor.get('factor', '')}"):
+                            st.markdown(f"**점수:** {factor.get('score', '')}/5")
+                            st.markdown(f"**설명:** {factor.get('explanation', '')}")
             
             st.divider()
             
@@ -423,7 +492,15 @@ def main():
             
             # 카테고리별 필터
             if obligations:
-                categories = list(set(ob.get('category', '') for ob in obligations))
+                # 카테고리 추출 (list 또는 string 모두 지원)
+                categories_set = set()
+                for ob in obligations:
+                    cat = ob.get('category', '')
+                    if isinstance(cat, list):
+                        categories_set.update(cat)  # list면 각 항목 추가
+                    elif cat:
+                        categories_set.add(cat)  # 문자열면 추가
+                categories = sorted(list(categories_set))
                 selected_category = st.selectbox(
                     "의무 카테고리 필터",
                     ["전체"] + categories
@@ -432,10 +509,15 @@ def main():
                 # 필터링
                 filtered_obligations = obligations
                 if selected_category != "전체":
-                    filtered_obligations = [
-                        ob for ob in obligations
-                        if ob.get('category', '') == selected_category
-                    ]
+                    filtered_obligations = []
+                    for ob in obligations:
+                        cat = ob.get('category', '')
+                        if isinstance(cat, list):
+                            if selected_category in cat:
+                                filtered_obligations.append(ob)
+                        elif cat == selected_category:
+                            filtered_obligations.append(ob)
+
                 
                 # 표시
                 for i, obligation in enumerate(filtered_obligations):
@@ -455,8 +537,8 @@ def main():
                                 st.markdown(f"**이행 주기:** {obligation['deadline']}")
                             
                             st.markdown("**체크리스트:**")
-                            for item in obligation.get('checklist', []):
-                                st.checkbox(item, value=False)
+                            for j, item in enumerate(obligation.get('checklist', [])):
+                                st.checkbox(item, value=False, key=f"obligation_checklist_{i}_{j}")
                         
                         with col2:
                             priority = obligation.get('priority', '권장')
@@ -587,9 +669,10 @@ def perform_diagnosis():
             'obligation': obligation_result
         }
         
-        # 결과 탭으로 전환
-        st.switch_to_query_params(tab="진단 결과")
-        st.success("진단이 완료되었습니다! 아래에서 결과를 확인하세요.")
+        # 결과 탭으로 전환 (탭 인덱스 1 = 진단 결과)
+        st.session_state.active_tab = 1
+        st.success("진단이 완료되었습니다! 아래의 '📊 진단 결과' 탭에서 결과를 확인하세요.")
+        st.rerun()
         
     except Exception as e:
         progress_bar.empty()
