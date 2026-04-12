@@ -1577,9 +1577,9 @@ API 키 없이도 데모 데이터로 기본 진단이 가능합니다.
 
 ## 🤖 LLM 설정
 
-### Ollama + qwen2.5:14b
+### Ollama + EEVE-Korean-Chat-10.8B
 
-- **모델**: Qwen2.5 14B (알리바바 최신 모델)
+- **모델**: shqkel/EEVE-Korean-Chat-10.8B:latest
 - **특징**: 한글 이해도 우수, 추론 능력 강함
 - **실행 환경**: 로컬 GPU/CPU (매우 빠름)
 
@@ -1589,7 +1589,7 @@ API 키 없이도 데모 데이터로 기본 진단이 가능합니다.
 
 ```python
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:14b"
+OLLAMA_MODEL = "shqkel/EEVE-Korean-Chat-10.8B:latest"
 ```
 
 다른 모델 사용 예:
@@ -1694,5 +1694,6 @@ GitHub Issues를 통해 버그 리포트 및 기능 제안을 받습니다.
 
 이 소프트웨어는 "있는 대로" 제공되며, 명시적이거나 묵시적인 어떤 보증도 하지 않습니다.
 
-작성일: 2024년
-최종 수정: 2024년
+작성일: 2026. 04. 12. (일)  
+최종 수정: 2026. 04. 12. (일)  
+
