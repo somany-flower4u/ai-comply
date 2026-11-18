@@ -71,7 +71,7 @@ run.sh, run.bat      환경 구성과 실행 스크립트
    cp .env.example .env
    ```
 
-   `.env.example`의 `OLLAMA_BASE_URL`, `OLLAMA_MODEL` 값은 자리표시자입니다. 기본값(`http://localhost:11434`, `shqkel/EEVE-Korean-Chat-10.8B`)을 쓰려면 이 두 줄을 지우거나 실제 값으로 바꿉니다.
+   `.env`의 `LAW_API_KEY`에 발급받은 인증키를 넣습니다. Ollama 주소와 모델은 기본값(`http://localhost:11434`, `shqkel/EEVE-Korean-Chat-10.8B`)으로 채워져 있습니다.
 
 2. Ollama 서버를 실행하고 모델을 받습니다.
 
