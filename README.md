@@ -117,7 +117,7 @@ run.bat
 
 ```bash
 python3 -m venv venv
-source venv/bin/activate          # Windows: venv\\Scripts\\activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 streamlit run app.py
 ```
@@ -150,22 +150,22 @@ streamlit run app.py
 
 ```text
 ai-comply/
-├── app.py                 # Streamlit UI와 진단 흐름
-├── config.py              # 환경 변수 및 법령·진단 설정
-├── data_collector.py      # 국가법령정보센터 API 수집기
-├── text_processor.py      # 조문 청킹 및 메타데이터 처리
-├── vector_store.py        # ChromaDB 저장·검색·통계
-├── utils.py               # 결과 포맷팅 및 보고서 유틸리티
+├── app.py                  # Streamlit UI와 진단 흐름
+├── config.py               # 환경 변수 및 법령·진단 설정
+├── data_collector.py       # 국가법령정보센터 API 수집기
+├── text_processor.py       # 조문 청킹 및 메타데이터 처리
+├── vector_store.py         # ChromaDB 저장·검색·통계
+├── utils.py                # 결과 포맷팅 및 보고서 유틸리티
 ├── agents/
-│   ├── base_agent.py      # RAG 검색과 Ollama 호출 공통 로직
-│   ├── classifier_agent.py# 사업자 유형 분류
-│   ├── high_impact_agent.py# 고영향 AI 분석
-│   └── obligation_agent.py# 준수 의무 생성
-├── requirements.txt       # Python 의존성
-├── .env.example           # 환경 변수 예시
-├── run.sh                 # macOS/Linux 실행 스크립트
-├── run.bat                # Windows 실행 스크립트
-└── test_*.py              # API·수집·저장 관련 테스트
+│   ├── base_agent.py       # RAG 검색과 Ollama 호출 공통 로직
+│   ├── classifier_agent.py  # 사업자 유형 분류
+│   ├── high_impact_agent.py # 고영향 AI 분석
+│   └── obligation_agent.py  # 준수 의무 생성
+├── requirements.txt        # Python 의존성
+├── .env.example            # 환경 변수 예시
+├── run.sh                  # macOS/Linux 실행 스크립트
+├── run.bat                 # Windows 실행 스크립트
+└── test_*.py               # API·수집·저장 관련 테스트
 ```
 
 ## 설정
