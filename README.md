@@ -1237,8 +1237,7 @@ MIT License - 자세한 내용은 LICENSE 파일 참조
 ## 연락처 및 지원
 
 - **이슈 리포트**: GitHub Issues
-- **이메일**: support@aicomply.kr
-- **문서**: [공식 문서](https://docs.aicomply.kr)
+- **이메일**: support@stelide.com
 
 ---
 
